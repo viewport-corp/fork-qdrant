@@ -13,11 +13,11 @@ use crate::ext::aligned_vec::ACow;
 use crate::generic_consts::{AccessPattern, Sequential};
 use crate::mmap::AdviceSetting;
 use crate::universal_io::simple_disk_cache::local_state::LocalState;
-use crate::universal_io::simple_disk_cache::pipeline::{DiskCachePipeline, OwnedDiskCachePipeline};
+use crate::universal_io::simple_disk_cache::pipeline::DiskCachePipeline;
 use crate::universal_io::simple_disk_cache::{DiskCacheRemote, to_block_range};
 use crate::universal_io::{
-    BorrowedReadPipeline, OpenOptions, OwnedReadPipeline, Populate, ReadRange, Result,
-    UniversalIoError, UniversalKind, UniversalRead, UniversalReadFs, UserData,
+    OpenOptions, OwnedPipeline, Populate, ReadPipeline, ReadRange, Result, UniversalIoError,
+    UniversalKind, UniversalRead, UniversalReadFs, UserData,
 };
 
 /// A lazily-populated local mirror of an immutable remote file.
@@ -32,7 +32,7 @@ use crate::universal_io::{
 /// Initializing multiple instances will try to re-read from remote.
 pub struct DiskCache<R>
 where
-    R: UniversalRead,
+    R: UniversalRead + 'static,
 {
     /// Clone of the remote filesystem handle, used to lazily open `remote`.
     remote_fs: R::Fs,
@@ -73,14 +73,14 @@ where
 }
 
 /// Where the [`LocalState`] comes from on first init.
-pub(super) enum InitSource<R: UniversalRead> {
+pub(super) enum InitSource<R: UniversalRead + 'static> {
     /// Build an empty local mmap and let reads fill blocks on demand.
     FromScratch,
     /// Wait for the prefill pipeline.
-    Prefiller(R::OwnedReadPipeline<()>),
+    Prefiller(OwnedPipeline<R, ()>),
     /// Wait for the prefill pipeline, but from reopen
     PartialPrefiller {
-        prefiller: R::OwnedReadPipeline<u64>,
+        prefiller: OwnedPipeline<R, u64>,
         local_state: LocalState,
     },
 }
@@ -268,16 +268,11 @@ where
 {
     type Fs = DiskCacheFs<R>;
 
-    type BorrowedReadPipeline<'a, U>
+    type ReadPipeline<'a, U>
         = DiskCachePipeline<'a, R, U>
     where
-        R: 'a,
         Self: 'a,
-        U: UserData;
-
-    type OwnedReadPipeline<U>
-        = OwnedDiskCachePipeline<R, U>
-    where
+        R: 'a,
         U: UserData;
 
     fn reopen(&mut self) -> Result<()> {
@@ -329,7 +324,7 @@ where
                 // we still make an page-aligned read.
                 let from = local_len.saturating_sub(local_len % BLOCK_SIZE as u64);
 
-                let mut remote_pipeline = R::OwnedReadPipeline::new(remote)?;
+                let mut remote_pipeline = OwnedPipeline::new(remote)?;
 
                 // FIXME: check can_schedule in a loop?
                 remote_pipeline.schedule_whole(from, from)?;

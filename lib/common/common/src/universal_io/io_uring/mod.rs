@@ -18,7 +18,7 @@ use fs_err as fs;
 use fs_err::os::unix::fs::{FileExt as _, OpenOptionsExt as _};
 
 use self::error::*;
-use self::pipeline::{BorrowedIoUringPipeline, OwnedIoUringPipeline};
+use self::pipeline::IoUringPipeline;
 use self::pool::*;
 use self::runtime::*;
 use super::traits::{OpenExtra, UniversalReadFileOps, UniversalReadFs};
@@ -145,15 +145,10 @@ impl UniversalReadFs for IoUringFs {
 impl UniversalRead for IoUringFile {
     type Fs = IoUringFs;
 
-    type BorrowedReadPipeline<'a, U>
-        = BorrowedIoUringPipeline<'a, U>
+    type ReadPipeline<'a, U>
+        = IoUringPipeline<'a, U>
     where
         Self: 'a,
-        U: UserData;
-
-    type OwnedReadPipeline<U>
-        = OwnedIoUringPipeline<U>
-    where
         U: UserData;
 
     fn reopen(&mut self) -> Result<()> {
@@ -163,7 +158,7 @@ impl UniversalRead for IoUringFile {
     fn read_bytes<P: AccessPattern>(&self, range: Range<u64>, align: usize) -> Result<ACow<'_>> {
         if self.direct_io {
             // direct_io needs special handling
-            let mut pipeline = BorrowedIoUringPipeline::<()>::new()?;
+            let mut pipeline = IoUringPipeline::<()>::new()?;
             pipeline.schedule::<P>((), self, range, align)?;
             let (_, bytes) = pipeline.wait()?.expect("there's exactly one read");
             return Ok(bytes);
