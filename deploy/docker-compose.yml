@@ -3,9 +3,13 @@ services:
     image: qdrant/qdrant:v1.18.2        # pinned stable (published 2026-06-04); never :latest for a persistent DB
     restart: always
     container_name: qdrant
-    ports:
-      - "6333:6333"                      # HTTP REST + dashboard + health/metrics — internal only, NO Dokploy domain, NO :80/:443
-      - "6334:6334"                      # gRPC API — internal only
+    # Internal-only: expose (NOT publish) the ports. Other containers on the Dokploy
+    # network reach this service by name at qdrant:6333 / qdrant:6334. No host port
+    # binding => no Dokploy domain, no :80/:443, no DNS, and no collision with any
+    # service on the separate (read-only) engine. Mirrors the MinIO/Infisical pattern.
+    expose:
+      - "6333"                           # HTTP REST + dashboard + health/metrics
+      - "6334"                           # gRPC API
     environment:
       # Auth is OFF by default in the OSS image (binds 0.0.0.0). Always set an API key.
       # Value is supplied as a Dokploy secret/env var — name only in git, never the literal.

@@ -25,7 +25,10 @@ This is the `viewport/deploy` branch of the `viewport-corp/fork-qdrant` fork; it
 | 6334 | gRPC API | internal only |
 | 6335 | P2P consensus (cluster mode only) | NOT used — single node |
 
-No Dokploy Domain, no `:80`/`:443`, no DNS. Internal + health verification only (per guardrails).
+Ports are **`expose`d, not published** to the host (no `ports:` mapping) — mirroring the
+MinIO/Infisical pattern on this engine. Other containers on the Dokploy network reach the
+service by name at `qdrant:6333` / `qdrant:6334`. This guarantees internal-only access and
+avoids any host-port collision. No Dokploy Domain, no `:80`/`:443`, no DNS (per guardrails).
 
 ## Persistence
 
