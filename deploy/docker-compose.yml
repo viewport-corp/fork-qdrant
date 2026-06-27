@@ -1,0 +1,30 @@
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.18.2        # pinned stable (published 2026-06-04); never :latest for a persistent DB
+    restart: always
+    container_name: qdrant
+    # Internal-only: expose (NOT publish) the ports. Other containers on the Dokploy
+    # network reach this service by name at qdrant:6333 / qdrant:6334. No host port
+    # binding => no Dokploy domain, no :80/:443, no DNS, and no collision with any
+    # service on the separate (read-only) engine. Mirrors the MinIO/Infisical pattern.
+    expose:
+      - "6333"                           # HTTP REST + dashboard + health/metrics
+      - "6334"                           # gRPC API
+    environment:
+      # Auth is OFF by default in the OSS image (binds 0.0.0.0). Always set an API key.
+      # Value is supplied as a Dokploy secret/env var — name only in git, never the literal.
+      - QDRANT__SERVICE__API_KEY=${QDRANT_API_KEY}
+      # Opt out of anonymized telemetry.
+      - QDRANT__TELEMETRY_DISABLED=true
+    volumes:
+      # /qdrant/storage MUST be a local block/POSIX volume — Qdrant does NOT support NFS or S3-backed FS.
+      # Docker named volumes (not bind mounts) so Dokploy Volume Backups work and survive redeploys.
+      - qdrant_storage:/qdrant/storage
+      - qdrant_snapshots:/qdrant/snapshots
+    # No compose healthcheck: the qdrant binary has no --healthcheck flag and the image
+    # ships no curl/wget. Health is verified externally via the HTTP endpoints
+    # GET :6333/livez, /readyz, /healthz (allowed without auth even when an API key is set).
+
+volumes:
+  qdrant_storage:
+  qdrant_snapshots:
